@@ -18,7 +18,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import java.util.concurrent.Executors
@@ -26,7 +25,7 @@ import java.util.concurrent.Executors
 @Composable
 fun ScanScreen() {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(
@@ -42,7 +41,6 @@ fun ScanScreen() {
         }
     )
 
-    // Solicitar permiso de cámara al entrar en la pantalla si aún no se ha concedido
     LaunchedEffect(key1 = true) {
         if (!hasCameraPermission) {
             launcher.launch(Manifest.permission.CAMERA)
@@ -72,38 +70,32 @@ fun CameraView(
             cameraProviderFuture.addListener({
                 val cameraProvider = cameraProviderFuture.get()
 
-                // 1. Configurar la vista previa (Preview)
                 val preview = Preview.Builder().build().also {
-                    it.setSurfaceProvider(previewView.surfaceProvider)
+                    it.surfaceProvider = previewView.surfaceProvider
                 }
 
-                // 2. Configurar el análisis de imagen (ImageAnalysis)
-                // Aquí es donde conectarás tu lógica de reconocimiento de cartas más adelante.
                 val imageAnalysis = ImageAnalysis.Builder()
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .build()
                     .also {
                         it.setAnalyzer(executor) { imageProxy ->
-                            // TODO: Implementar aquí el reconocimiento de la imagen de la carta.
-                            // Por ahora, solo cerramos la imagen para que la cámara siga fluyendo.
-                            imageProxy.close()
+                            imageProxy.use { proxy ->
+                                // TODO: Escanear las cartas
+                            }
                         }
                     }
 
-                // 3. Seleccionar la cámara trasera
                 val cameraSelector = CameraSelector.Builder()
                     .requireLensFacing(CameraSelector.LENS_FACING_BACK)
                     .build()
 
-                // Desvincular cualquier caso de uso anterior antes de volver a vincular
                 cameraProvider.unbindAll()
 
-                // Vincular los casos de uso (Preview y ImageAnalysis) al ciclo de vida
                 cameraProvider.bindToLifecycle(
                     lifecycleOwner,
                     cameraSelector,
                     preview,
-                    imageAnalysis // Añade el analizador de imágenes
+                    imageAnalysis
                 )
             }, ContextCompat.getMainExecutor(ctx))
             previewView

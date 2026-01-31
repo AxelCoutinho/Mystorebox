@@ -1,4 +1,4 @@
-package com.example.mystorebox.screens
+package com.example.mystorebox.ui.screens.home
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize

@@ -21,9 +21,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.example.mystorebox.screens.HomeScreen
-import com.example.mystorebox.screens.InventoryScreen
-import com.example.mystorebox.screens.ScanScreen
+import com.example.mystorebox.ui.screens.home.HomeScreen
+import com.example.mystorebox.ui.screens.inventory.InventoryScreen
+import com.example.mystorebox.ui.screens.scanner.ScanScreen
 
 @Composable
 fun AppNavigation() {

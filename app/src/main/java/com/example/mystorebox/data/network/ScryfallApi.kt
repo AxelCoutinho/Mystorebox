@@ -3,6 +3,7 @@ package com.example.mystorebox.data.network
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
+import retrofit2.http.Path
 import retrofit2.http.Query
 
 data class ScryfallCard(
@@ -23,7 +24,10 @@ data class Prices(
 
 interface ScryfallService {
     @GET("cards/named")
-    suspend fun getCardByName(@Query("fuzzy") name: String): ScryfallCard
+    suspend fun getCardByName(
+        @Query("fuzzy") name: String,
+        @Query("set") set: String? = null
+    ): ScryfallCard
 }
 
 object RetrofitClient {

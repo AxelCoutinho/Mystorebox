@@ -160,12 +160,14 @@ fun CameraView(
 
                 cameraProvider.unbindAll()
 
-                cameraProvider.bindToLifecycle(
+                val camera = cameraProvider.bindToLifecycle(
                     lifecycleOwner,
                     cameraSelector,
                     preview,
                     imageAnalysis
                 )
+                camera.cameraControl.setZoomRatio(1.5f)
+
             }, ContextCompat.getMainExecutor(ctx))
             previewView
         },
@@ -194,8 +196,19 @@ fun CardOverlay(state: ScannerUiState) {
             if (state.isLoading) {
                 CircularProgressIndicator(color = Color.White)
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("Buscando en Scryfall...", color = Color.White)
+                Text("Searching your card...", color = Color.White)
             }
+
+//            Column(
+//                modifier = Modifier
+//                    .fillMaxWidth()
+//                    .background(Color.Red.copy(alpha = 0.3f))
+//                    .padding(8.dp)
+//            ) {
+//                Text("DEBUG INFO:", color = Color.Red, fontWeight = FontWeight.Bold)
+//                Text("Name: ${state.detectedText}", color = Color.White, fontSize = 12.sp)
+//                Text("Set Detected: [${state.detectedSet ?: "None"}]", color = Color.Yellow, fontWeight = FontWeight.Bold)
+//            }
 
             state.cardFound?.let { card ->
                 Text(
@@ -209,7 +222,7 @@ fun CardOverlay(state: ScannerUiState) {
 
                 AsyncImage(
                     model = card.image_uris?.normal,
-                    contentDescription = "Carta de Magic",
+                    contentDescription = "Magic Card",
                     modifier = Modifier.height(300.dp)
                 )
 

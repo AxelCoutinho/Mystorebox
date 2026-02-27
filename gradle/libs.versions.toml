@@ -12,10 +12,23 @@ activityCompose = "1.10.1"
 composeBom = "2024.09.00"
 materialIconsExtendedAndroid = "1.7.8"
 navigationCompose = "2.9.6"
+playServicesBase = "18.10.0"
 playstoreDynamicFeatureSupport = "16.0.1"
 textRecognition = "16.0.1"
 uiTextGoogleFonts = "1.10.1"
 cameraCore = "1.5.2"
+ksp = "2.0.21-1.0.25"
+hilt = "2.51.1"
+googleServices = "4.4.2"
+room = "2.6.1"
+mlkitTextRecognition = "16.0.1"
+retrofit = "2.9.0"
+coil = "2.6.0"
+datastore = "1.0.0"
+gson = "2.10.1"
+googleAuth = "20.7.0"
+googleApiClient = "1.32.1"
+googleApiSheets = "v4-rev20220927-2.0.0"
 
 [libraries]
 androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "cameraxVersion" }
@@ -41,11 +54,36 @@ androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit
 androidx-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-ui-text-google-fonts = { group = "androidx.compose.ui", name = "ui-text-google-fonts", version.ref = "uiTextGoogleFonts" }
 camera-core = { group = "androidx.camera", name = "camera-core", version.ref = "cameraCore" }
+play-services-base = { module = "com.google.android.gms:play-services-base", version.ref = "playServicesBase" }
 playstore-dynamic-feature-support = { module = "com.google.mlkit:playstore-dynamic-feature-support", version = "16.0.0-beta2" }
 text-recognition = { module = "com.google.mlkit:text-recognition", version.ref = "textRecognition" }
+google-hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
+google-hilt-compiler = { group = "com.google.dagger", name = "hilt-android-compiler", version.ref = "hilt" }
+room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
+room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
+room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+
+mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition", version.ref = "mlkitTextRecognition" }
+
+retrofit-core = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = "retrofit" }
+retrofit-converter-gson = { group = "com.squareup.retrofit2", name = "converter-gson", version.ref = "retrofit" }
+gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
+
+coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+
+datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
+
+play-services-auth = { group = "com.google.android.gms", name = "play-services-auth", version.ref = "googleAuth" }
+
+google-api-client-android = { group = "com.google.api-client", name = "google-api-client-android", version.ref = "googleApiClient" }
+
+google-api-services-sheets = { group = "com.google.apis", name = "google-api-services-sheets", version.ref = "googleApiSheets" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+google-ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+google-dagger-hilt-android = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
+google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }
 

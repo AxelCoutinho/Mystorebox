@@ -1,42 +1,41 @@
 package com.example.mystorebox.ui.screens.scanner
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.mystorebox.data.network.RetrofitClient
 import com.example.mystorebox.data.network.ScryfallCard
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-
-data class ScannerUiState(
-    val detectedText: String = "",
-    val detectedSet: String? = null,
-    val cardFound: ScryfallCard? = null,
-    val isLoading: Boolean = false,
-    val error: String? = null
-)
 
 class ScannerViewModel : ViewModel() {
 
-    var uiState by mutableStateOf(ScannerUiState())
-        private set
+    private val _uiState = MutableStateFlow(ScannerUiState())
+    val uiState: StateFlow<ScannerUiState> = _uiState.asStateFlow()
 
     private var searchJob: Job? = null
 
     fun onTextDetected(rawText: String) {
         val identity = extractCardIdentity(rawText)
+        val currentState = _uiState.value
 
+        if (currentState.isLoading || currentState.cardFound != null) return
         if (identity.name.length < 3) return
+        if (identity.name == currentState.detectedText && identity.setCode == currentState.detectedSet) return
 
-        if (identity.name == uiState.detectedText && identity.setCode == uiState.detectedSet) return
-
-        uiState = uiState.copy(
-            detectedText = identity.name,
-            detectedSet = identity.setCode
-        )
+        _uiState.update { state ->
+            state.copy(
+                detectedText = identity.name,
+                detectedSet = identity.setCode,
+                error = null
+            )
+        }
 
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
@@ -46,30 +45,112 @@ class ScannerViewModel : ViewModel() {
     }
 
     private suspend fun searchCard(name: String, setCode: String?) {
-        uiState = uiState.copy(isLoading = true, error = null)
+        _uiState.update { it.copy(isLoading = true, error = null) }
+
+        val cleanName = name.replace(Regex("[^\\p{L}\\p{N}\\s'-,]"), "").trim()
+        val cleanSet = setCode?.replace(Regex("[^a-zA-Z0-9]"), "")?.trim()
+
         try {
-            val card = RetrofitClient.service.getCardByName(name = name, set = setCode)
-            uiState = uiState.copy(isLoading = false, cardFound = card)
+            Log.d("ScryfallAPI", "ENVIANDO A API -> Nombre: '[$cleanName]' | Set: '[$cleanSet]'")
+            val card = RetrofitClient.service.getCardByName(name = cleanName, set = cleanSet)
+
+            handleSuccessfulScan(card)
+
         } catch (e: Exception) {
-            // Fallback: With this we'll ensure to get the card only using the name if the reading on the set failed.
-            if (setCode != null) {
+            if (e is CancellationException) throw e
+
+            if (e is retrofit2.HttpException) {
+                val errorJson = e.response()?.errorBody()?.string()
+                Log.e("ScryfallAPI", "Scryfall rejected the request. Real reason: $errorJson")
+            } else {
+                Log.e("ScryfallAPI", "Main search error: ${e.message}", e)
+            }
+
+            if (cleanSet != null) {
                 try {
-                    val fallbackCard = RetrofitClient.service.getCardByName(name = name)
-                    uiState = uiState.copy(isLoading = false, cardFound = fallbackCard)
+                    Log.d("ScryfallAPI", "Iniciando Fallback -> Nombre: '[$cleanName]'")
+                    val fallbackCard = RetrofitClient.service.getCardByName(name = cleanName)
+
+                    handleSuccessfulScan(fallbackCard)
+
                 } catch (e2: Exception) {
-                    uiState = uiState.copy(isLoading = false, error = "No encontrada")
+                    if (e2 is CancellationException) throw e2
+                    Log.e("ScryfallAPI", "Error en fallback de la API: ${e2.message}", e2)
+                    resetAfterError()
                 }
             } else {
-                uiState = uiState.copy(isLoading = false, error = "No encontrada")
+                resetAfterError()
             }
         }
+    }
+
+    private suspend fun handleSuccessfulScan(card: ScryfallCard) {
+        addCardToTray(card)
+
+        _uiState.update { it.copy(isLoading = false, cardFound = card) }
+
+        delay(2000)
+        _uiState.update { it.copy(cardFound = null, detectedText = "", detectedSet = null) }
+    }
+
+    private fun resetAfterError() {
+        _uiState.update {
+            it.copy(isLoading = false, error = "Not found", detectedText = "", detectedSet = null)
+        }
+    }
+
+    private fun addCardToTray(newCard: ScryfallCard) {
+        _uiState.update { state ->
+            val existingItem = state.trayItems.find { it.card.id == newCard.id }
+
+            val newTray = if (existingItem != null) {
+                state.trayItems.map { item ->
+                    if (item.card.id == newCard.id) item.copy(quantity = item.quantity + 1) else item
+                }
+            } else {
+                listOf(TrayItem(newCard, 1)) + state.trayItems
+            }
+
+            state.copy(trayItems = newTray)
+        }
+    }
+
+    fun increaseTrayItemQuantity(cardId: String) {
+        _uiState.update { state ->
+            val newTray = state.trayItems.map { item ->
+                if (item.card.id == cardId) item.copy(quantity = item.quantity + 1) else item
+            }
+            state.copy(trayItems = newTray)
+        }
+    }
+
+    fun decreaseTrayItemQuantity(cardId: String) {
+        _uiState.update { state ->
+            val newTray = state.trayItems.mapNotNull { item ->
+                if (item.card.id == cardId) {
+                    if (item.quantity > 1) item.copy(quantity = item.quantity - 1)
+                    else null
+                } else {
+                    item
+                }
+            }
+            state.copy(trayItems = newTray)
+        }
+    }
+
+    fun setTrayVisibility(isVisible: Boolean) {
+        _uiState.update { it.copy(isTrayVisible = isVisible) }
+    }
+
+    fun clearTray() {
+        _uiState.update { it.copy(trayItems = emptyList(), isTrayVisible = false) }
     }
 
     private fun extractCardIdentity(text: String): CardIdentity {
         val lines = text.split("\n")
         val possibleName = lines.firstOrNull { it.length > 3 }?.trim() ?: ""
 
-        val validLangs = "en|es|fr|de|it|pt|ja|ko|ru|zh|ph"
+        val validLangs = "en|es|fr|de|it|pt"
 
         val strictPattern = Regex(
             "([a-z0-9]{3,4})\\s*[\\u2022\\.\\-\\s]\\s*($validLangs)\\b",
@@ -82,14 +163,9 @@ class ScannerViewModel : ViewModel() {
         val setCode = bestMatch?.groupValues?.get(1)
 
         if (setCode != null) {
-            android.util.Log.d("OCR_MATCH", "Set válido encontrado: $setCode (Idioma: ${bestMatch.groupValues[2]})")
+            Log.d("OCR_MATCH", "Set válido encontrado: $setCode (Idioma: ${bestMatch.groupValues[2]})")
         }
 
         return CardIdentity(possibleName, setCode)
     }
 }
-
-data class CardIdentity(
-    val name: String,
-    val setCode: String? = null
-)

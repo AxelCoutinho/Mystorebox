@@ -9,41 +9,46 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import java.util.concurrent.Executors
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.compose.foundation.layout.Box
-import androidx.compose.ui.unit.dp
-import com.example.mystorebox.utils.CardImageAnalyzer
 import coil.compose.AsyncImage
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.Text
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.text.font.FontWeight
+import com.example.mystorebox.data.network.ScryfallCard
+import com.example.mystorebox.utils.CardImageAnalyzer
+import java.util.concurrent.Executors
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScanScreen(
+    onNavigateToInventory: (List<ScryfallCard>) -> Unit,
     viewModel: ScannerViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    val uiState by viewModel.uiState.collectAsState()
+
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(
@@ -52,6 +57,7 @@ fun ScanScreen(
             ) == PackageManager.PERMISSION_GRANTED
         )
     }
+
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
         onResult = { granted ->
@@ -66,65 +72,56 @@ fun ScanScreen(
     }
 
     if (hasCameraPermission) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            CameraView(
-                modifier = Modifier.fillMaxSize(),
-                lifecycleOwner = lifecycleOwner,
-                onTextFound = { text ->
-                    viewModel.onTextDetected(text)
+        Scaffold(
+            floatingActionButton = {
+                if (uiState.trayItems.isNotEmpty()) {
+                    val totalCards = uiState.trayItems.sumOf { it.quantity }
+                    ExtendedFloatingActionButton(
+                        onClick = { viewModel.setTrayVisibility(true) },
+                        icon = { Icon(Icons.Default.ShoppingCart, contentDescription = "Bandeja") },
+                        text = { Text("Bandeja ($totalCards)") },
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
                 }
-            )
-            CardOverlay(state = viewModel.uiState)
+            }
+        ) { padding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+            ) {
+                CameraView(
+                    modifier = Modifier.fillMaxSize(),
+                    lifecycleOwner = lifecycleOwner,
+                    onTextFound = { text ->
+                        viewModel.onTextDetected(text)
+                    }
+                )
+                CardOverlay(state = uiState)
+            }
+        }
+
+        if (uiState.isTrayVisible) {
+            ModalBottomSheet(
+                onDismissRequest = { viewModel.setTrayVisibility(false) },
+                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+            ) {
+                TrayContent(
+                    trayItems = uiState.trayItems,
+                    onIncrease = { cardId -> viewModel.increaseTrayItemQuantity(cardId) },
+                    onDecrease = { cardId -> viewModel.decreaseTrayItemQuantity(cardId) },
+                    onSaveClick = {
+                        val flattenedCards = uiState.trayItems.flatMap { item ->
+                            List(item.quantity) { item.card }
+                        }
+                        viewModel.setTrayVisibility(false)
+                        onNavigateToInventory(flattenedCards)
+                    }
+                )
+            }
         }
     }
-}
-
-@Composable
-fun CardOverlay(
-    modifier: Modifier = Modifier,
-    lifecycleOwner: LifecycleOwner,
-    onTextFound: (String) -> Unit
-) {
-    val context = LocalContext.current
-    val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
-    val executor = remember { Executors.newSingleThreadExecutor() }
-
-    AndroidView(
-        factory = { ctx ->
-            val previewView = PreviewView(ctx)
-
-            cameraProviderFuture.addListener({
-                val cameraProvider = cameraProviderFuture.get()
-
-                val preview = Preview.Builder().build().also {
-                    it.surfaceProvider = previewView.surfaceProvider
-                }
-
-                val imageAnalysis = ImageAnalysis.Builder()
-                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                    .build()
-                    .also {
-                        it.setAnalyzer(executor, CardImageAnalyzer(onTextFound))
-                    }
-
-                val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-
-                try {
-                    cameraProvider.unbindAll()
-                    cameraProvider.bindToLifecycle(
-                        lifecycleOwner,
-                        cameraSelector,
-                        preview,
-                        imageAnalysis
-                    )
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }, ContextCompat.getMainExecutor(ctx))
-            previewView
-        },
-        modifier = modifier
-    )
 }
 
 @Composable
@@ -185,30 +182,28 @@ fun CardOverlay(state: ScannerUiState) {
             .padding(20.dp),
         contentAlignment = Alignment.Center
     ) {
-
         Column(
             modifier = Modifier
                 .background(Color.Black.copy(alpha = 0.8f), shape = RoundedCornerShape(16.dp))
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-
             if (state.isLoading) {
                 CircularProgressIndicator(color = Color.White)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text("Searching your card...", color = Color.White)
             }
 
-//            Column(
-//                modifier = Modifier
-//                    .fillMaxWidth()
-//                    .background(Color.Red.copy(alpha = 0.3f))
-//                    .padding(8.dp)
-//            ) {
-//                Text("DEBUG INFO:", color = Color.Red, fontWeight = FontWeight.Bold)
-//                Text("Name: ${state.detectedText}", color = Color.White, fontSize = 12.sp)
-//                Text("Set Detected: [${state.detectedSet ?: "None"}]", color = Color.Yellow, fontWeight = FontWeight.Bold)
-//            }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.Red.copy(alpha = 0.3f))
+                    .padding(8.dp)
+            ) {
+                Text("DEBUG INFO:", color = Color.Red, fontWeight = FontWeight.Bold)
+                Text("Name: ${state.detectedText}", color = Color.White, fontSize = 12.sp)
+                Text("Set Detected: [${state.detectedSet ?: "None"}]", color = Color.Yellow, fontWeight = FontWeight.Bold)
+            }
 
             state.cardFound?.let { card ->
                 Text(
@@ -237,6 +232,125 @@ fun CardOverlay(state: ScannerUiState) {
 
             if (state.cardFound == null && !state.isLoading) {
                 Text("Texto detectado: ${state.detectedText}", color = Color.Gray)
+            }
+        }
+    }
+}
+
+@Composable
+fun TrayContent(
+    trayItems: List<TrayItem>,
+    onIncrease: (String) -> Unit,
+    onDecrease: (String) -> Unit,
+    onSaveClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .padding(bottom = 32.dp)
+    ) {
+        Text(
+            text = "Bandeja de Escaneo",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+
+        if (trayItems.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(150.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("La bandeja está vacía", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f, fill = false),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(trayItems) { item ->
+                    TrayItemRow(
+                        item = item,
+                        onIncrease = { onIncrease(item.card.id) },
+                        onDecrease = { onDecrease(item.card.id) }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            val totalCards = trayItems.sumOf { it.quantity }
+            Button(
+                onClick = onSaveClick,
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.medium
+            ) {
+                Text(
+                    text = "Guardar $totalCards cartas en Inventario",
+                    modifier = Modifier.padding(vertical = 8.dp),
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun TrayItemRow(
+    item: TrayItem,
+    onIncrease: () -> Unit,
+    onDecrease: () -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(12.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = item.card.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = item.card.set?.uppercase() ?: "UNKNOWN",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                IconButton(
+                    onClick = onDecrease,
+                    modifier = Modifier.size(36.dp),
+                    colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                ) {
+                    Icon(Icons.Default.Remove, contentDescription = "Restar", modifier = Modifier.size(18.dp))
+                }
+
+                Text(
+                    text = item.quantity.toString(),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.defaultMinSize(minWidth = 32.dp),
+                    textAlign = TextAlign.Center
+                )
+
+                IconButton(
+                    onClick = onIncrease,
+                    modifier = Modifier.size(36.dp),
+                    colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Sumar", modifier = Modifier.size(18.dp))
+                }
             }
         }
     }

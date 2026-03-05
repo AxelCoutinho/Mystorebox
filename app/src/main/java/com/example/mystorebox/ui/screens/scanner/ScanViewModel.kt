@@ -168,4 +168,50 @@ class ScannerViewModel : ViewModel() {
 
         return CardIdentity(possibleName, setCode)
     }
+
+    fun fetchAlternativePrints(card: ScryfallCard) {
+        val printsUri = card.prints_search_uri
+        if (printsUri.isNullOrEmpty()) return
+
+        _uiState.update { it.copy(isFetchingPrints = true, cardBeingEdited = card) }
+
+        viewModelScope.launch {
+            try {
+                val response = RetrofitClient.service.getCardPrints(printsUri)
+
+                _uiState.update {
+                    it.copy(
+                        isFetchingPrints = false,
+                        availablePrints = response.data
+                    )
+                }
+            } catch (e: Exception) {
+                if (e !is CancellationException) {
+                    Log.e("ScryfallAPI", "Error buscando impresiones: ${e.message}", e)
+                    _uiState.update { it.copy(isFetchingPrints = false, availablePrints = emptyList()) }
+                }
+            }
+        }
+    }
+    fun clearAlternativePrints() {
+        _uiState.update {
+            it.copy(availablePrints = emptyList(), cardBeingEdited = null)
+        }
+    }
+    fun swapTrayItemPrint(oldCardId: String, newCard: ScryfallCard) {
+        _uiState.update { state ->
+            val newTray = state.trayItems.map { item ->
+                if (item.card.id == oldCardId) {
+                    item.copy(card = newCard)
+                } else {
+                    item
+                }
+            }
+            state.copy(
+                trayItems = newTray,
+                availablePrints = emptyList(),
+                cardBeingEdited = null
+            )
+        }
+    }
 }

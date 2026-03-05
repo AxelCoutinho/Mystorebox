@@ -63,6 +63,8 @@ fun InventoryScreen(
     val isExporting by viewModel.isExporting.collectAsState()
     val exportSuccessUrl by viewModel.exportSuccessUrl.collectAsState()
 
+    val exportError by viewModel.exportError.collectAsState()
+
     val authClient = remember { GoogleAuthUtil.getAuthClient(context) }
     val authRequest = remember { GoogleAuthUtil.getSheetsAuthRequest() }
 
@@ -76,11 +78,18 @@ fun InventoryScreen(
                     android.util.Log.d("GoogleAuth", "¡Permiso concedido! Token: $token")
                     viewModel.exportToGoogleSheets(token)
                 } ?: run {
-                    android.util.Log.e("GoogleAuth", "Error: El token regresó nulo")
+                    val errorMsg = "Error: El token de Google regresó nulo"
+                    android.util.Log.e("GoogleAuth", errorMsg)
+                    android.widget.Toast.makeText(context, errorMsg, android.widget.Toast.LENGTH_LONG).show()
                 }
             } catch (e: Exception) {
                 android.util.Log.e("GoogleAuth", "Error de autorización: ${e.message}")
+                android.widget.Toast.makeText(context, "Fallo de autorización: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
             }
+        } else {
+            val errorMsg = "Autenticación cancelada o rechazada. Código: ${result.resultCode}"
+            android.util.Log.e("GoogleAuth", errorMsg)
+            android.widget.Toast.makeText(context, errorMsg, android.widget.Toast.LENGTH_LONG).show()
         }
     }
     BackHandler(enabled = isSavingMode || isDeletionMode || currentBox != null) {
@@ -171,6 +180,7 @@ fun InventoryScreen(
                                 }
                                 .addOnFailureListener { e ->
                                     android.util.Log.e("GoogleAuth", "Error: ${e.message}")
+                                    android.widget.Toast.makeText(context, "Error de conexión: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
                                 }
                         }) {
                             Icon(Icons.Default.Share, contentDescription = "Exportar a Google Sheets")
@@ -352,7 +362,7 @@ fun InventoryScreen(
         AlertDialog(
             onDismissRequest = {  },
             confirmButton = {},
-            title = { Text("Exportando a la Nube ☁️") },
+            title = { Text("Exportando a la Nube...") },
             text = {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -368,7 +378,7 @@ fun InventoryScreen(
     exportSuccessUrl?.let { url ->
         AlertDialog(
             onDismissRequest = { viewModel.clearExportState() },
-            title = { Text("¡Exportación Exitosa! 🎉") },
+            title = { Text("¡Exportación Exitosa!") },
             text = {
                 Text("Tu inventario completo se ha guardado correctamente como una hoja de cálculo en tu Google Drive.")
             },
@@ -383,6 +393,25 @@ fun InventoryScreen(
             dismissButton = {
                 TextButton(onClick = { viewModel.clearExportState() }) {
                     Text("Cerrar")
+                }
+            }
+        )
+    }
+    exportError?.let { errorMessage ->
+        AlertDialog(
+            onDismissRequest = { viewModel.clearExportError() },
+            title = {
+                Text(
+                    text = "Error al Exportar",
+                    color = MaterialTheme.colorScheme.error
+                )
+            },
+            text = {
+                Text("Ocurrió un problema al intentar subir tu inventario a Google Sheets:\n\n$errorMessage")
+            },
+            confirmButton = {
+                Button(onClick = { viewModel.clearExportError() }) {
+                    Text("Entendido")
                 }
             }
         )

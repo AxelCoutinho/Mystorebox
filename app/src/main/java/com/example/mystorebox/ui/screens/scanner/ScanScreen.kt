@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
@@ -35,6 +36,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.mystorebox.data.network.ScryfallCard
+import com.example.mystorebox.ui.composables.AlternativePrintsBottomSheet
 import com.example.mystorebox.utils.CardImageAnalyzer
 import java.util.concurrent.Executors
 
@@ -111,15 +113,32 @@ fun ScanScreen(
                     trayItems = uiState.trayItems,
                     onIncrease = { cardId -> viewModel.increaseTrayItemQuantity(cardId) },
                     onDecrease = { cardId -> viewModel.decreaseTrayItemQuantity(cardId) },
+                    onEditClick = { card ->
+                        viewModel.fetchAlternativePrints(card)
+                    },
                     onSaveClick = {
                         val flattenedCards = uiState.trayItems.flatMap { item ->
                             List(item.quantity) { item.card }
                         }
-                        viewModel.setTrayVisibility(false)
                         onNavigateToInventory(flattenedCards)
+                        viewModel.clearTray()
                     }
                 )
             }
+        }
+        if (uiState.cardBeingEdited != null && uiState.availablePrints.isNotEmpty()) {
+            AlternativePrintsBottomSheet(
+                availablePrints = uiState.availablePrints,
+                onDismissRequest = {
+                    viewModel.clearAlternativePrints()
+                },
+                onPrintSelected = { selectedCard ->
+                    viewModel.swapTrayItemPrint(
+                        oldCardId = uiState.cardBeingEdited!!.id,
+                        newCard = selectedCard
+                    )
+                }
+            )
         }
     }
 }
@@ -194,16 +213,16 @@ fun CardOverlay(state: ScannerUiState) {
                 Text("Searching your card...", color = Color.White)
             }
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color.Red.copy(alpha = 0.3f))
-                    .padding(8.dp)
-            ) {
-                Text("DEBUG INFO:", color = Color.Red, fontWeight = FontWeight.Bold)
-                Text("Name: ${state.detectedText}", color = Color.White, fontSize = 12.sp)
-                Text("Set Detected: [${state.detectedSet ?: "None"}]", color = Color.Yellow, fontWeight = FontWeight.Bold)
-            }
+//            Column(
+//                modifier = Modifier
+//                    .fillMaxWidth()
+//                    .background(Color.Red.copy(alpha = 0.3f))
+//                    .padding(8.dp)
+//            ) {
+//                Text("DEBUG INFO:", color = Color.Red, fontWeight = FontWeight.Bold)
+//                Text("Name: ${state.detectedText}", color = Color.White, fontSize = 12.sp)
+//                Text("Set Detected: [${state.detectedSet ?: "None"}]", color = Color.Yellow, fontWeight = FontWeight.Bold)
+//            }
 
             state.cardFound?.let { card ->
                 Text(
@@ -242,6 +261,7 @@ fun TrayContent(
     trayItems: List<TrayItem>,
     onIncrease: (String) -> Unit,
     onDecrease: (String) -> Unit,
+    onEditClick: (ScryfallCard) -> Unit,
     onSaveClick: () -> Unit
 ) {
     Column(
@@ -275,7 +295,8 @@ fun TrayContent(
                     TrayItemRow(
                         item = item,
                         onIncrease = { onIncrease(item.card.id) },
-                        onDecrease = { onDecrease(item.card.id) }
+                        onDecrease = { onDecrease(item.card.id) },
+                        onEdit = { onEditClick(item.card) }
                     )
                 }
             }
@@ -302,7 +323,8 @@ fun TrayContent(
 fun TrayItemRow(
     item: TrayItem,
     onIncrease: () -> Unit,
-    onDecrease: () -> Unit
+    onDecrease: () -> Unit,
+    onEdit: () -> Unit
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -319,7 +341,7 @@ fun TrayItemRow(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = item.card.set?.uppercase() ?: "UNKNOWN",
+                    text = item.card.set.uppercase(),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -329,6 +351,16 @@ fun TrayItemRow(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
+                IconButton(
+                    onClick = onEdit,
+                    modifier = Modifier.size(36.dp),
+                    colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
+                ) {
+                    Icon(Icons.Default.Edit, contentDescription = "Editar Edición", modifier = Modifier.size(18.dp))
+                }
+
+                Spacer(modifier = Modifier.width(4.dp))
+
                 IconButton(
                     onClick = onDecrease,
                     modifier = Modifier.size(36.dp),

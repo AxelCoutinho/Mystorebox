@@ -12,9 +12,15 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+data class ExportResult(val spreadsheetId: String, val spreadsheetUrl: String)
+
 object GoogleSheetsExporter {
 
-    suspend fun exportInventory(accessToken: String, inventoryData: List<SheetsExportRecord>): String {
+    suspend fun exportInventory(
+        accessToken: String,
+        inventoryData: List<SheetsExportRecord>,
+        existingSpreadsheetId: String? = null
+    ): ExportResult {
         return withContext(Dispatchers.IO) {
             val requestInitializer = HttpRequestInitializer { request ->
                 request.headers.authorization = "Bearer $accessToken"
@@ -25,15 +31,6 @@ object GoogleSheetsExporter {
                 GsonFactory.getDefaultInstance(),
                 requestInitializer
             ).setApplicationName("My Store Box").build()
-
-            val dateStr = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date())
-            val newSheet = Spreadsheet().apply {
-                properties = SpreadsheetProperties().setTitle("Inventario Store Box - $dateStr")
-            }
-
-            val createdSheet = sheetsService.spreadsheets().create(newSheet).execute()
-            val spreadsheetId = createdSheet.spreadsheetId
-            val sheetId = createdSheet.sheets?.get(0)?.properties?.sheetId ?: 0
 
             val rowsData = mutableListOf<List<Any>>()
             rowsData.add(listOf("Caja", "Fila", "Carta", "Edición", "Cantidad"))
@@ -49,10 +46,41 @@ object GoogleSheetsExporter {
                     )
                 )
             }
-
             val body = ValueRange().setValues(rowsData)
+
+            if (existingSpreadsheetId != null) {
+                try {
+                    sheetsService.spreadsheets().values().clear(
+                        existingSpreadsheetId,
+                        "A1:E",
+                        ClearValuesRequest()
+                    ).execute()
+
+                    sheetsService.spreadsheets().values()
+                        .update(existingSpreadsheetId, "A1", body)
+                        .setValueInputOption("USER_ENTERED")
+                        .execute()
+
+                    val sheet = sheetsService.spreadsheets().get(existingSpreadsheetId).execute()
+
+                    return@withContext ExportResult(existingSpreadsheetId, sheet.spreadsheetUrl)
+
+                } catch (e: Exception) {
+                    android.util.Log.w("GoogleSheets", "No se pudo actualizar el archivo existente. Creando uno nuevo...", e)
+                }
+            }
+
+            val dateStr = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date())
+            val newSheet = Spreadsheet().apply {
+                properties = SpreadsheetProperties().setTitle("Inventario Store Box - $dateStr")
+            }
+
+            val createdSheet = sheetsService.spreadsheets().create(newSheet).execute()
+            val newSpreadsheetId = createdSheet.spreadsheetId
+            val sheetId = createdSheet.sheets?.get(0)?.properties?.sheetId ?: 0
+
             sheetsService.spreadsheets().values()
-                .update(spreadsheetId, "A1", body)
+                .update(newSpreadsheetId, "A1", body)
                 .setValueInputOption("USER_ENTERED")
                 .execute()
 
@@ -101,9 +129,9 @@ object GoogleSheetsExporter {
             )
 
             val batchUpdateRequest = BatchUpdateSpreadsheetRequest().setRequests(requests)
-            sheetsService.spreadsheets().batchUpdate(spreadsheetId, batchUpdateRequest).execute()
+            sheetsService.spreadsheets().batchUpdate(newSpreadsheetId, batchUpdateRequest).execute()
 
-            createdSheet.spreadsheetUrl
+            ExportResult(newSpreadsheetId, createdSheet.spreadsheetUrl)
         }
     }
 }

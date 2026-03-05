@@ -9,5 +9,8 @@ data class ScannerUiState(
     val trayItems: List<TrayItem> = emptyList(),
     val isTrayVisible: Boolean = false,
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val availablePrints: List<ScryfallCard> = emptyList(),
+    val isFetchingPrints: Boolean = false,
+    val cardBeingEdited: ScryfallCard? = null
 )

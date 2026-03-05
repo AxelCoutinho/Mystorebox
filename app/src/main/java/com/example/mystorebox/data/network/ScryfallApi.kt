@@ -6,7 +6,11 @@ import retrofit2.http.GET
 import retrofit2.http.Path
 import retrofit2.http.Query
 import okhttp3.OkHttpClient
+import retrofit2.http.Url
 
+data class ScryfallSearchResponse(
+    val data: List<ScryfallCard>
+)
 
 data class ScryfallCard(
     val id: String,
@@ -14,11 +18,13 @@ data class ScryfallCard(
     val set: String,
     val collector_number: String,
     val image_uris: ImageUris?,
-    val prices: Prices?
+    val prices: Prices?,
+    val prints_search_uri: String?
 )
 
 data class ImageUris(
-    val normal: String
+    val normal: String,
+    val small: String?
 )
 
 data class Prices(
@@ -32,6 +38,9 @@ interface ScryfallService {
         @Query("fuzzy") name: String,
         @Query("set") set: String? = null
     ): ScryfallCard
+
+    @GET
+    suspend fun getCardPrints(@Url printsUrl: String): ScryfallSearchResponse
 }
 
 object RetrofitClient {

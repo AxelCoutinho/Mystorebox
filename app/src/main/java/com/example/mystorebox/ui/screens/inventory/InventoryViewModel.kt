@@ -14,10 +14,15 @@ import com.example.mystorebox.utils.toEntity
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import android.content.Context
+import androidx.core.content.edit
 
 class InventoryViewModel(application: Application) : AndroidViewModel(application) {
 
     private val inventoryDao = AppDatabase.getDatabase(application).inventoryDao()
+
+    private val prefs = application.getSharedPreferences("StoreBoxPrefs", Context.MODE_PRIVATE)
+
 
     val boxes: StateFlow<List<BoxWithRows>> = inventoryDao.getBoxesWithRows()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -60,6 +65,13 @@ class InventoryViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val _exportSuccessUrl = MutableStateFlow<String?>(null)
     val exportSuccessUrl: StateFlow<String?> = _exportSuccessUrl.asStateFlow()
+
+    private val _exportError = MutableStateFlow<String?>(null)
+    val exportError = _exportError.asStateFlow()
+
+    fun clearExportError() {
+        _exportError.value = null
+    }
 
     fun selectBox(box: BoxWithRows?) {
         _selectedBoxId.value = box?.box?.boxId
@@ -154,14 +166,21 @@ class InventoryViewModel(application: Application) : AndroidViewModel(applicatio
     fun exportToGoogleSheets(accessToken: String) {
         viewModelScope.launch {
             _isExporting.value = true
+            _exportError.value = null
+
             try {
                 val inventoryData = inventoryDao.getInventoryForSheetsExport()
+                val savedSheetId = prefs.getString("SHEET_ID", null)
 
-                val spreadsheetUrl = GoogleSheetsExporter.exportInventory(accessToken, inventoryData)
+                val result = GoogleSheetsExporter.exportInventory(accessToken, inventoryData, savedSheetId)
 
-                _exportSuccessUrl.value = spreadsheetUrl
+                prefs.edit { putString("SHEET_ID", result.spreadsheetId) }
+                _exportSuccessUrl.value = result.spreadsheetUrl
+
             } catch (e: Exception) {
                 android.util.Log.e("ExportToSheets", "Error exportando: ${e.message}", e)
+
+                _exportError.value = e.localizedMessage ?: "Error desconocido de la API de Google"
             } finally {
                 _isExporting.value = false
             }

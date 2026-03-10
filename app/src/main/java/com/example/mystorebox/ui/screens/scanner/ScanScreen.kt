@@ -1,6 +1,7 @@
 package com.example.mystorebox.ui.screens.scanner
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -40,6 +41,7 @@ import com.example.mystorebox.ui.composables.AlternativePrintsBottomSheet
 import com.example.mystorebox.utils.CardImageAnalyzer
 import java.util.concurrent.Executors
 
+@SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScanScreen(
@@ -48,23 +50,17 @@ fun ScanScreen(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-
     val uiState by viewModel.uiState.collectAsState()
 
     var hasCameraPermission by remember {
         mutableStateOf(
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.CAMERA
-            ) == PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         )
     }
 
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
-        onResult = { granted ->
-            hasCameraPermission = granted
-        }
+        onResult = { granted -> hasCameraPermission = granted }
     )
 
     LaunchedEffect(key1 = true) {
@@ -75,11 +71,13 @@ fun ScanScreen(
 
     if (hasCameraPermission) {
         Scaffold(
+            contentWindowInsets = WindowInsets(0),
             floatingActionButton = {
                 if (uiState.trayItems.isNotEmpty()) {
                     val totalCards = uiState.trayItems.sumOf { it.quantity }
                     ExtendedFloatingActionButton(
                         onClick = { viewModel.setTrayVisibility(true) },
+                        modifier = Modifier.navigationBarsPadding().padding(bottom = 16.dp),
                         icon = { Icon(Icons.Default.ShoppingCart, contentDescription = "Bandeja") },
                         text = { Text("Bandeja ($totalCards)") },
                         containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -87,18 +85,12 @@ fun ScanScreen(
                     )
                 }
             }
-        ) { padding ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-            ) {
+        ) { _ ->
+            Box(modifier = Modifier.fillMaxSize()) {
                 CameraView(
                     modifier = Modifier.fillMaxSize(),
                     lifecycleOwner = lifecycleOwner,
-                    onTextFound = { text ->
-                        viewModel.onTextDetected(text)
-                    }
+                    onTextFound = { text -> viewModel.onTextDetected(text) }
                 )
                 CardOverlay(state = uiState)
             }
@@ -113,25 +105,20 @@ fun ScanScreen(
                     trayItems = uiState.trayItems,
                     onIncrease = { cardId -> viewModel.increaseTrayItemQuantity(cardId) },
                     onDecrease = { cardId -> viewModel.decreaseTrayItemQuantity(cardId) },
-                    onEditClick = { card ->
-                        viewModel.fetchAlternativePrints(card)
-                    },
+                    onEditClick = { card -> viewModel.fetchAlternativePrints(card) },
                     onSaveClick = {
-                        val flattenedCards = uiState.trayItems.flatMap { item ->
-                            List(item.quantity) { item.card }
-                        }
+                        val flattenedCards = uiState.trayItems.flatMap { item -> List(item.quantity) { item.card } }
                         onNavigateToInventory(flattenedCards)
                         viewModel.clearTray()
                     }
                 )
             }
         }
+
         if (uiState.cardBeingEdited != null && uiState.availablePrints.isNotEmpty()) {
             AlternativePrintsBottomSheet(
                 availablePrints = uiState.availablePrints,
-                onDismissRequest = {
-                    viewModel.clearAlternativePrints()
-                },
+                onDismissRequest = { viewModel.clearAlternativePrints() },
                 onPrintSelected = { selectedCard ->
                     viewModel.swapTrayItemPrint(
                         oldCardId = uiState.cardBeingEdited!!.id,
@@ -154,7 +141,10 @@ fun CameraView(
 
     AndroidView(
         factory = { ctx ->
-            val previewView = PreviewView(ctx)
+            val previewView = PreviewView(ctx).apply {
+                scaleType = PreviewView.ScaleType.FILL_CENTER
+                implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+            }
             val executor = Executors.newSingleThreadExecutor()
             cameraProviderFuture.addListener({
                 val cameraProvider = cameraProviderFuture.get()
@@ -166,9 +156,7 @@ fun CameraView(
                 val imageAnalysis = ImageAnalysis.Builder()
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .build()
-                    .also {
-                        it.setAnalyzer(executor, CardImageAnalyzer(onTextFound))
-                    }
+                    .also { it.setAnalyzer(executor, CardImageAnalyzer(onTextFound)) }
 
                 val cameraSelector = CameraSelector.Builder()
                     .requireLensFacing(CameraSelector.LENS_FACING_BACK)
@@ -182,7 +170,7 @@ fun CameraView(
                     preview,
                     imageAnalysis
                 )
-                camera.cameraControl.setZoomRatio(1.5f)
+                camera.cameraControl.setZoomRatio(1.2f)
 
             }, ContextCompat.getMainExecutor(ctx))
             previewView
@@ -198,6 +186,7 @@ fun CardOverlay(state: ScannerUiState) {
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .statusBarsPadding()
             .padding(20.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -210,26 +199,16 @@ fun CardOverlay(state: ScannerUiState) {
             if (state.isLoading) {
                 CircularProgressIndicator(color = Color.White)
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("Searching your card...", color = Color.White)
+                Text("Buscando carta...", color = Color.White)
             }
-
-//            Column(
-//                modifier = Modifier
-//                    .fillMaxWidth()
-//                    .background(Color.Red.copy(alpha = 0.3f))
-//                    .padding(8.dp)
-//            ) {
-//                Text("DEBUG INFO:", color = Color.Red, fontWeight = FontWeight.Bold)
-//                Text("Name: ${state.detectedText}", color = Color.White, fontSize = 12.sp)
-//                Text("Set Detected: [${state.detectedSet ?: "None"}]", color = Color.Yellow, fontWeight = FontWeight.Bold)
-//            }
 
             state.cardFound?.let { card ->
                 Text(
                     text = card.name,
                     color = Color.White,
                     fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))

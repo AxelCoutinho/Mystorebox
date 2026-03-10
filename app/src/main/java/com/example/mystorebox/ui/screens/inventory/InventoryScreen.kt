@@ -112,7 +112,6 @@ fun InventoryScreen(
             } else {
                 TopAppBarDefaults.topAppBarColors()
             }
-
             TopAppBar(
                 title = {
                     val titleText = when {
@@ -186,7 +185,8 @@ fun InventoryScreen(
                             Icon(Icons.Default.Share, contentDescription = "Exportar a Google Sheets")
                         }
                     }
-                }
+                },
+                windowInsets = WindowInsets(0, 0, 0, 0)
             )
         },
         floatingActionButton = {

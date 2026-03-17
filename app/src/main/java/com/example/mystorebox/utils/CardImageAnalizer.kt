@@ -8,7 +8,8 @@ import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 
 class CardImageAnalyzer(
-    private val onTextFound: (String) -> Unit
+    private val onTextFound: (String) -> Unit,
+    private val onNoText: () -> Unit
 ) : ImageAnalysis.Analyzer {
 
     private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
@@ -25,22 +26,24 @@ class CardImageAnalyzer(
             return
         }
 
-        imageProxy.use { proxy ->
-            val mediaImage = proxy.image
-            if (mediaImage != null) {
-                val image = InputImage.fromMediaImage(mediaImage, proxy.imageInfo.rotationDegrees)
+        val mediaImage = imageProxy.image
+        if (mediaImage != null) {
+            val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
 
-                recognizer.process(image)
-                    .addOnSuccessListener { visionText ->
-                        if (visionText.text.isNotBlank()) {
-                            onTextFound(visionText.text)
-                            lastProcessedTimestamp = currentTimestamp
-                        }
+            recognizer.process(image)
+                .addOnSuccessListener { visionText ->
+                    if (visionText.text.isNotBlank()) {
+                        onTextFound(visionText.text)
+                        lastProcessedTimestamp = currentTimestamp
+                    } else {
+                        onNoText()
                     }
-                    .addOnFailureListener { e ->
-                        e.printStackTrace()
-                    }
-            }
+                }
+                .addOnCompleteListener {
+                    imageProxy.close()
+                }
+        } else {
+            imageProxy.close()
         }
     }
 }

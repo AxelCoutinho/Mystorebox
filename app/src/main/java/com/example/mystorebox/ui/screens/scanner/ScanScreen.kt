@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
@@ -46,7 +47,7 @@ import java.util.concurrent.Executors
 @Composable
 fun ScanScreen(
     onNavigateToInventory: (List<ScryfallCard>) -> Unit,
-    viewModel: ScannerViewModel = viewModel()
+    viewModel: ScanViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -90,6 +91,7 @@ fun ScanScreen(
                 CameraView(
                     modifier = Modifier.fillMaxSize(),
                     lifecycleOwner = lifecycleOwner,
+                    viewModel = viewModel,
                     onTextFound = { text -> viewModel.onTextDetected(text) }
                 )
                 CardOverlay(state = uiState)
@@ -134,6 +136,7 @@ fun ScanScreen(
 fun CameraView(
     modifier: Modifier = Modifier,
     lifecycleOwner: LifecycleOwner,
+    viewModel: ScanViewModel,
     onTextFound: (String) -> Unit
 ) {
     val context = LocalContext.current
@@ -156,7 +159,16 @@ fun CameraView(
                 val imageAnalysis = ImageAnalysis.Builder()
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .build()
-                    .also { it.setAnalyzer(executor, CardImageAnalyzer(onTextFound)) }
+                    .also {
+                        it.setAnalyzer(executor, CardImageAnalyzer(
+                            onTextFound = { text ->
+                                viewModel.onTextDetected(text)
+                            },
+                            onNoText = {
+                                viewModel.onNoTextDetected()
+                            }
+                        ))
+                    }
 
                 val cameraSelector = CameraSelector.Builder()
                     .requireLensFacing(CameraSelector.LENS_FACING_BACK)

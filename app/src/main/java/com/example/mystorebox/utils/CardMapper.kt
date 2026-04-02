@@ -13,6 +13,8 @@ fun ScryfallCard.toEntity(boxId: String, rowId: String): CardEntity {
         imageUrl = this.image_uris?.normal,
         priceUsd = this.prices?.usd,
         locationBoxId = boxId,
-        locationRowId = rowId
+        locationRowId = rowId,
+        imageUri = this.image_uris?.normal,
+        quantity = 1
     )
 }

@@ -1,8 +1,12 @@
 package com.example.mystorebox.ui.composables
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -10,16 +14,34 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import com.example.mystorebox.data.local.entities.CardEntity
+import com.example.mystorebox.ui.screens.inventory.GroupedCard
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun SavedCardRow(card: CardEntity, modifier: Modifier = Modifier) {
+fun SavedCardRow(
+    groupedCard: GroupedCard,
+    modifier: Modifier = Modifier,
+    isSelectedForDeletion: Boolean = false,
+    isDeletionModeActive: Boolean = false,
+    onClick: () -> Unit = {},
+    onLongClick: () -> Unit = {},
+    onEditClick: () -> Unit = {}
+) {
+    val containerColor = if (isSelectedForDeletion) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant
+    val contentColor = if (isSelectedForDeletion) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant
+
     Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        modifier = modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isSelectedForDeletion) 8.dp else 2.dp)
     ) {
         Row(
             modifier = Modifier
@@ -28,8 +50,8 @@ fun SavedCardRow(card: CardEntity, modifier: Modifier = Modifier) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             AsyncImage(
-                model = card.imageUrl,
-                contentDescription = "Imagen de ${card.name}",
+                model = groupedCard.card.image_uris?.normal,
+                contentDescription = null,
                 modifier = Modifier
                     .width(55.dp)
                     .aspectRatio(2.5f / 3.5f)
@@ -41,28 +63,43 @@ fun SavedCardRow(card: CardEntity, modifier: Modifier = Modifier) {
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = card.name,
+                    text = groupedCard.card.name,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
+                    color = contentColor,
                     maxLines = 1
                 )
-
-                Spacer(modifier = Modifier.height(2.dp))
-
                 Text(
-                    text = "${card.setCode?.uppercase() ?: "???"} • #${card.collectorNumber ?: "?"}",
+                    text = "${groupedCard.card.set.uppercase()} • #${groupedCard.card.collector_number ?: "?"}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = contentColor.copy(alpha = 0.8f)
                 )
             }
 
-            if (card.priceUsd != null) {
+            if (!isDeletionModeActive) {
+                IconButton(onClick = onEditClick) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Editar",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = if (isSelectedForDeletion) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier
+                    .padding(start = 4.dp)
+                    .defaultMinSize(minWidth = 40.dp)
+            ) {
                 Text(
-                    text = "$${card.priceUsd}",
+                    text = "x${groupedCard.quantity}",
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(start = 8.dp)
+                    color = if (isSelectedForDeletion) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onPrimaryContainer,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
                 )
             }
         }

@@ -10,7 +10,7 @@ import com.example.mystorebox.data.local.entities.RowEntity
 
 @Database(
     entities = [BoxEntity::class, RowEntity::class, CardEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {

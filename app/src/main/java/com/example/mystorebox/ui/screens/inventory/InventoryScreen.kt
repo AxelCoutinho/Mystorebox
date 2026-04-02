@@ -27,7 +27,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.mystorebox.data.network.ScryfallCard
 import com.example.mystorebox.ui.composables.CreateItemDialog
 import com.example.mystorebox.ui.composables.SavedCardRow
-import com.example.mystorebox.ui.composables.ScannedCardRow
 import com.example.mystorebox.utils.GoogleAuthUtil
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -42,7 +41,7 @@ fun InventoryScreen(
     val uriHandler = LocalUriHandler.current
 
     val boxes by viewModel.boxes.collectAsState()
-    val cardsInRow by viewModel.cardsInSelectedRow.collectAsState()
+    val groupedCardsInRow by viewModel.groupedCardsInSelectedRow.collectAsState()
     val rowCardCounts by viewModel.rowCardCounts.collectAsState()
 
     val selectedBox by viewModel.selectedBox.collectAsState()
@@ -52,10 +51,11 @@ fun InventoryScreen(
 
     val selectedBoxesForDeletion by viewModel.selectedBoxesForDeletion.collectAsState()
     val selectedRowsForDeletion by viewModel.selectedRowsForDeletion.collectAsState()
+    val selectedCardsForDeletion by viewModel.selectedCardsForDeletion.collectAsState()
 
     val isSavingMode = scannedCards.isNotEmpty()
     val canSave = currentBox != null && currentRow != null
-    val isDeletionMode = selectedBoxesForDeletion.isNotEmpty() || selectedRowsForDeletion.isNotEmpty()
+    val isDeletionMode = selectedBoxesForDeletion.isNotEmpty() || selectedRowsForDeletion.isNotEmpty() || selectedCardsForDeletion.isNotEmpty()
 
     val showCreateBoxDialog by viewModel.showCreateBoxDialog.collectAsState()
     val showCreateRowDialog by viewModel.showCreateRowDialog.collectAsState()
@@ -64,6 +64,20 @@ fun InventoryScreen(
     val exportSuccessUrl by viewModel.exportSuccessUrl.collectAsState()
 
     val exportError by viewModel.exportError.collectAsState()
+
+    val cardBeingEdited by viewModel.cardBeingEdited.collectAsState()
+    val availablePrints by viewModel.availablePrints.collectAsState()
+
+    val groupedScannedCards = remember(scannedCards) {
+        scannedCards.groupBy { "${it.name}_${it.set}" }
+            .map { (_, group) ->
+                GroupedCard(
+                    card = group.first(),
+                    quantity = group.size
+                )
+            }
+            .sortedBy { it.card.name }
+    }
 
     val authClient = remember { GoogleAuthUtil.getAuthClient(context) }
     val authRequest = remember { GoogleAuthUtil.getSheetsAuthRequest() }
@@ -115,7 +129,7 @@ fun InventoryScreen(
             TopAppBar(
                 title = {
                     val titleText = when {
-                        isDeletionMode -> "${selectedBoxesForDeletion.size + selectedRowsForDeletion.size} seleccionados"
+                        isDeletionMode -> "${selectedBoxesForDeletion.size + selectedRowsForDeletion.size + selectedCardsForDeletion.size} seleccionados"
                         isSavingMode -> "Guardar (${scannedCards.size})"
                         currentRow != null && !isSavingMode -> currentRow.name
                         else -> "Gestión de Almacén"
@@ -307,7 +321,7 @@ fun InventoryScreen(
                     modifier = Modifier.padding(vertical = 16.dp)
                 )
 
-                if (cardsInRow.isEmpty()) {
+                if (groupedCardsInRow.isEmpty()) {
                     Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                         Text(
                             text = "Aún no hay cartas en esta fila",
@@ -320,8 +334,33 @@ fun InventoryScreen(
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(cardsInRow) { cardEntity ->
-                            SavedCardRow(card = cardEntity)
+                        items(groupedCardsInRow) { group ->
+                            val groupKey = "${group.card.name}_${group.card.set}"
+
+                            val isSelected = selectedCardsForDeletion.contains(groupKey)
+
+                            SavedCardRow(
+                                groupedCard = group,
+                                isSelectedForDeletion = isSelected,
+                                isDeletionModeActive = isDeletionMode,
+                                onClick = {
+                                    if (isDeletionMode) {
+                                        viewModel.toggleCardForDeletion(groupKey)
+                                    } else {
+                                        //TODO: Add a detail view in the future.
+                                    }
+                                },
+                                onLongClick = {
+                                    if (!isSavingMode) {
+                                        viewModel.toggleCardForDeletion(groupKey)
+                                    }
+                                },
+                                onEditClick = {
+                                    android.util.Log.d("Inventory", "Editando: ${group.card.name}")
+
+                                    viewModel.onEditCardClicked(group)
+                                }
+                            )
                         }
                     }
                 }
@@ -335,8 +374,8 @@ fun InventoryScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(top = 8.dp)
                 ) {
-                    items(scannedCards) { card ->
-                        ScannedCardRow(card = card)
+                    items(groupedScannedCards) { group ->
+                        SavedCardRow(groupedCard = group)
                     }
                 }
             }
@@ -415,5 +454,30 @@ fun InventoryScreen(
                 }
             }
         )
+    }
+
+    if (cardBeingEdited != null) {
+        if (availablePrints.isEmpty()) {
+            AlertDialog(
+                onDismissRequest = { viewModel.clearEditState() },
+                confirmButton = {},
+                title = { Text("Buscando ediciones...") },
+                text = {
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+            )
+        } else {
+            com.example.mystorebox.ui.composables.AlternativePrintsBottomSheet(
+                cardGroupToEdit = cardBeingEdited!!,
+                availablePrints = availablePrints,
+                onDismissRequest = { viewModel.clearEditState() },
+                onConfirmDistribution = { distributionMap ->
+                    viewModel.confirmPrintDistribution(cardBeingEdited!!, distributionMap)
+                    viewModel.clearEditState()
+                }
+            )
+        }
     }
 }

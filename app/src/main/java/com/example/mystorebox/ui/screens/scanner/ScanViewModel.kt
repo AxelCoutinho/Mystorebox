@@ -181,12 +181,28 @@ class ScanViewModel : ViewModel() {
         _uiState.update { it.copy(availablePrints = emptyList(), cardBeingEdited = null) }
     }
 
-    fun swapTrayItemPrint(oldCardId: String, newCard: ScryfallCard) {
-        _uiState.update { state ->
-            val newTray = state.trayItems.map { item ->
-                if (item.card.id == oldCardId) item.copy(card = newCard) else item
+    fun distributeTrayItemPrints(originalCard: ScryfallCard, distributionMap: Map<ScryfallCard, Int>) {
+        _uiState.update { currentState ->
+            val updatedList = currentState.trayItems.toMutableList()
+
+            updatedList.removeAll { it.card.name == originalCard.name && it.card.set == originalCard.set }
+
+            distributionMap.forEach { (newScryfallCard, qty) ->
+                if (qty > 0) {
+                    updatedList.add(
+                        TrayItem(
+                            card = newScryfallCard,
+                            quantity = qty
+                        )
+                    )
+                }
             }
-            state.copy(trayItems = newTray, availablePrints = emptyList(), cardBeingEdited = null)
+
+            currentState.copy(
+                trayItems = updatedList,
+                cardBeingEdited = null,
+                availablePrints = emptyList()
+            )
         }
     }
 }

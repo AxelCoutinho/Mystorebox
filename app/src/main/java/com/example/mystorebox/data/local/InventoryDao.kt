@@ -39,6 +39,9 @@ interface InventoryDao {
     @Query("SELECT * FROM cards WHERE locationRowId = :rowId")
     fun getCardsByRowId(rowId: String): Flow<List<CardEntity>>
 
+    @Query("DELETE FROM cards WHERE uniqueId IN (:idList)")
+    suspend fun deleteCardsByIds(idList: List<String>)
+
     data class SheetsExportRecord(
         val boxName: String,
         val rowName: String,

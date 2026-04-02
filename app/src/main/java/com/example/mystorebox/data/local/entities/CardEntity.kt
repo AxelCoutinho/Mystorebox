@@ -34,5 +34,8 @@ data class CardEntity(
     val locationBoxId: String,
     val locationRowId: String,
 
+    val imageUri: String? = null,
+    val quantity: Int = 1,
+
     val addedAt: Long = System.currentTimeMillis()
 )

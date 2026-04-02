@@ -118,13 +118,22 @@ fun ScanScreen(
         }
 
         if (uiState.cardBeingEdited != null && uiState.availablePrints.isNotEmpty()) {
+
+            val copiesInTray = uiState.trayItems
+                .filter { it.card.name == uiState.cardBeingEdited?.name }
+                .sumOf { it.quantity }
+
             AlternativePrintsBottomSheet(
+                cardGroupToEdit = com.example.mystorebox.ui.screens.inventory.GroupedCard(
+                    card = uiState.cardBeingEdited!!,
+                    quantity = if (copiesInTray > 0) copiesInTray else 1
+                ),
                 availablePrints = uiState.availablePrints,
                 onDismissRequest = { viewModel.clearAlternativePrints() },
-                onPrintSelected = { selectedCard ->
-                    viewModel.swapTrayItemPrint(
-                        oldCardId = uiState.cardBeingEdited!!.id,
-                        newCard = selectedCard
+                onConfirmDistribution = { distributionMap ->
+                    viewModel.distributeTrayItemPrints(
+                        originalCard = uiState.cardBeingEdited!!,
+                        distributionMap = distributionMap
                     )
                 }
             )

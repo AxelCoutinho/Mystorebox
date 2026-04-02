@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import android.content.Context
 import androidx.core.content.edit
+import com.example.mystorebox.data.network.RetrofitClient
 
 class InventoryViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -48,6 +49,35 @@ class InventoryViewModel(application: Application) : AndroidViewModel(applicatio
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val groupedCardsInSelectedRow: StateFlow<List<GroupedCard>> = cardsInSelectedRow
+        .map { flatCardList ->
+            flatCardList.groupBy { "${it.name}_${it.setCode}" }
+                .map { (_, group) ->
+                    val firstCard = group.first()
+                    GroupedCard(
+                        card = ScryfallCard(
+                            id = firstCard.uniqueId,
+                            name = firstCard.name,
+                            set = firstCard.setCode,
+                            collector_number = firstCard.collectorNumber,
+                            prices = com.example.mystorebox.data.network.Prices(
+                                usd = firstCard.priceUsd,
+                                eur = null,
+                            ),
+                            image_uris = com.example.mystorebox.data.network.ImageUris(
+                                small = null,
+                                normal = firstCard.imageUri ?: ""
+                            ),
+                            prints_search_uri = null
+                        ),
+                        quantity = group.size,
+                        instanceIds = group.map { it.uniqueId }
+                    )
+                }
+                .sortedBy { it.card.name }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     private val _showCreateBoxDialog = MutableStateFlow(false)
     val showCreateBoxDialog: StateFlow<Boolean> = _showCreateBoxDialog.asStateFlow()
 
@@ -59,6 +89,15 @@ class InventoryViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val _selectedRowsForDeletion = MutableStateFlow<Set<String>>(emptySet())
     val selectedRowsForDeletion = _selectedRowsForDeletion.asStateFlow()
+
+    private val _selectedCardsForDeletion = MutableStateFlow<Set<String>>(emptySet())
+    val selectedCardsForDeletion = _selectedCardsForDeletion.asStateFlow()
+
+    fun toggleCardForDeletion(groupKey: String) {
+        val current = _selectedCardsForDeletion.value.toMutableSet()
+        if (current.contains(groupKey)) current.remove(groupKey) else current.add(groupKey)
+        _selectedCardsForDeletion.value = current
+    }
 
     private val _isExporting = MutableStateFlow(false)
     val isExporting: StateFlow<Boolean> = _isExporting.asStateFlow()
@@ -143,12 +182,14 @@ class InventoryViewModel(application: Application) : AndroidViewModel(applicatio
     fun clearDeletionSelection() {
         _selectedBoxesForDeletion.value = emptySet()
         _selectedRowsForDeletion.value = emptySet()
+        _selectedCardsForDeletion.value = emptySet()
     }
 
     fun deleteSelectedItems() {
         viewModelScope.launch {
             val boxesToDelete = _selectedBoxesForDeletion.value.toList()
             val rowsToDelete = _selectedRowsForDeletion.value.toList()
+            val cardKeysToDelete = _selectedCardsForDeletion.value.toList() // NUEVO
 
             if (boxesToDelete.isNotEmpty()) {
                 inventoryDao.deleteBoxesByIds(boxesToDelete)
@@ -159,7 +200,91 @@ class InventoryViewModel(application: Application) : AndroidViewModel(applicatio
                 if (rowsToDelete.contains(_selectedRowId.value)) _selectedRowId.value = null
             }
 
+            if (cardKeysToDelete.isNotEmpty()) {
+                val idsToDelete = groupedCardsInSelectedRow.value
+                    .filter { cardKeysToDelete.contains("${it.card.name}_${it.card.set}") }
+                    .flatMap { it.instanceIds }
+
+                if (idsToDelete.isNotEmpty()) {
+                    inventoryDao.deleteCardsByIds(idsToDelete)
+                }
+            }
+
             clearDeletionSelection()
+        }
+    }
+
+    private val _cardBeingEdited = MutableStateFlow<GroupedCard?>(null)
+    val cardBeingEdited = _cardBeingEdited.asStateFlow()
+
+    private val _availablePrints = MutableStateFlow<List<ScryfallCard>>(emptyList())
+    val availablePrints = _availablePrints.asStateFlow()
+
+    fun onEditCardClicked(group: GroupedCard) {
+        _cardBeingEdited.value = group
+        _availablePrints.value = emptyList()
+
+        viewModelScope.launch {
+            try {
+                val finalUrl = group.card.prints_search_uri ?:
+                "https://api.scryfall.com/cards/search?q=%21%22${java.net.URLEncoder.encode(group.card.name, "UTF-8")}%22+unique%3Aprints"
+
+                android.util.Log.d("InventoryVM", "Buscando en: $finalUrl")
+
+                val response = RetrofitClient.service.getCardPrints(finalUrl)
+
+                if (response.data.isNotEmpty()) {
+                    _availablePrints.value = response.data
+                } else {
+                    _cardBeingEdited.value = null
+                }
+
+            } catch (e: Exception) {
+                android.util.Log.e("InventoryVM", "Error en la búsqueda: ${e.message}")
+                _cardBeingEdited.value = null
+            }
+        }
+    }
+
+    fun clearEditState() {
+        _cardBeingEdited.value = null
+        _availablePrints.value = emptyList()
+    }
+
+    fun confirmPrintDistribution(
+        oldGroup: GroupedCard,
+        distributionMap: Map<ScryfallCard, Int>
+    ) {
+        viewModelScope.launch {
+            val oldIds = oldGroup.instanceIds
+
+            inventoryDao.deleteCardsByIds(oldIds)
+
+            val newCardsToInsert = mutableListOf<CardEntity>()
+
+            val boxId = selectedBox.value?.box?.boxId ?: ""
+            val rowId = selectedRow.value?.rowId ?: ""
+
+            distributionMap.forEach { (scryfallCard, quantity) ->
+                repeat(quantity) {
+                    newCardsToInsert.add(
+                        CardEntity(
+                            uniqueId = java.util.UUID.randomUUID().toString(),
+                            name = scryfallCard.name,
+                            setCode = scryfallCard.set,
+                            collectorNumber = scryfallCard.collector_number,
+                            priceUsd = scryfallCard.prices?.usd,
+                            imageUrl = scryfallCard.image_uris?.normal,
+                            locationBoxId = boxId,
+                            locationRowId = rowId
+                        )
+                    )
+                }
+            }
+
+            if (newCardsToInsert.isNotEmpty()) {
+                inventoryDao.insertCards(newCardsToInsert)
+            }
         }
     }
 
